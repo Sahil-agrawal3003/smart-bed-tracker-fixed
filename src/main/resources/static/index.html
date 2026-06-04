@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🏥 Smart Hospital Bed Tracker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:  #22c55e;
+      --red:    #ef4444;
+      --yellow: #f59e0b;
+      --blue:   #3b82f6;
+      --gray:   #6b7280;
+      --bg:     #f0f4f8;
+      --card:   #ffffff;
+      --border: #e5e7eb;
+      --text:   #111827;
+      --sub:    #6b7280;
+    }
+
+    /* ── Keyframes ── */
+    @keyframes fadeIn       { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeInUp     { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes slideDown    { from{opacity:0;transform:translateY(-18px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes spin         { to{transform:rotate(360deg)} }
+    @keyframes shimmer      { 0%{background-position:-600px 0} 100%{background-position:600px 0} }
+    @keyframes countUp      { from{opacity:0;transform:scale(.6)} to{opacity:1;transform:scale(1)} }
+    @keyframes ripple       { to{transform:scale(4);opacity:0} }
+    @keyframes float        { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    @keyframes gradientShift{ 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+    @keyframes heartbeat    { 0%,100%{transform:scale(1)} 14%{transform:scale(1.18)} 28%{transform:scale(1)} 42%{transform:scale(1.1)} 56%{transform:scale(1)} }
+    @keyframes loginSlideIn { from{opacity:0;transform:translateY(36px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+    @keyframes bgPulse      { 0%,100%{opacity:.5} 50%{opacity:.9} }
+    @keyframes slideLeft    { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
+    @keyframes badgePop     { 0%{transform:scale(0)} 70%{transform:scale(1.25)} 100%{transform:scale(1)} }
+    @keyframes wsPulse      { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.5)} 50%{box-shadow:0 0 0 6px rgba(34,197,94,0)} }
+    @keyframes toastIn      { from{transform:translateX(120%);opacity:0} to{transform:translateX(0);opacity:1} }
+    @keyframes toastOut     { from{transform:translateX(0);opacity:1} to{transform:translateX(120%);opacity:0} }
+    @keyframes modalIn      { from{opacity:0;transform:scale(.9) translateY(24px)} to{opacity:1;transform:scale(1) translateY(0)} }
+
+    /* ══════════════════════════════════════════
+       LOGIN PAGE
+    ══════════════════════════════════════════ */
+    #login-page {
+      position: fixed; inset: 0; z-index: 9999;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 45%, #1d4ed8 100%);
+      background-size: 300% 300%;
+      animation: gradientShift 8s ease infinite;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .lp-blob {
+      position: absolute; border-radius: 50%;
+      background: rgba(255,255,255,.05);
+      animation: bgPulse 5s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .lp-blob:nth-child(1){ width:420px;height:420px;top:-130px;left:-110px; }
+    .lp-blob:nth-child(2){ width:320px;height:320px;bottom:-90px;right:-70px;animation-delay:2s; }
+    .lp-blob:nth-child(3){ width:180px;height:180px;top:55%;left:62%;animation-delay:3.5s; }
+
+    #login-card {
+      position: relative; z-index: 2;
+      background: rgba(255,255,255,.08);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 24px;
+      padding: 2.8rem 2.4rem 2.4rem;
+      width: 100%; max-width: 420px;
+      box-shadow: 0 32px 80px rgba(0,0,0,.55);
+      animation: loginSlideIn .55s cubic-bezier(.22,1,.36,1) forwards;
+      margin: 1rem;
+    }
+    .login-logo { text-align: center; margin-bottom: 1.8rem; }
+    .login-logo .icon { font-size: 3.4rem; display:block; animation: heartbeat 2.8s ease-in-out infinite; }
+    .login-logo h1 { color:#fff; font-size:1.45rem; font-weight:800; margin-top:.5rem; letter-spacing:-.02em; }
+    .login-logo p  { color:rgba(255,255,255,.45); font-size:.82rem; margin-top:.2rem; }
+
+    .login-field { margin-bottom: 1.2rem; }
+    .login-field label {
+      display:block; color:rgba(255,255,255,.65);
+      font-size:.78rem; font-weight:600; margin-bottom:.4rem;
+      text-transform:uppercase; letter-spacing:.05em;
+    }
+    .login-field-wrap { position:relative; }
+    .login-field-wrap .fi {
+      position:absolute; left:.82rem; top:50%; transform:translateY(-50%);
+      font-size:.95rem; pointer-events:none; opacity:.55;
+    }
+    .login-field input {
+      width:100%; background:rgba(255,255,255,.1);
+      border:1.5px solid rgba(255,255,255,.2);
+      border-radius:10px; padding:.68rem .75rem .68rem 2.5rem;
+      color:#fff; font-size:.92rem; outline:none;
+      transition:border-color .2s, background .2s, box-shadow .2s;
+    }
+    .login-field input::placeholder { color:rgba(255,255,255,.3); }
+    .login-field input:focus {
+      border-color:rgba(99,102,241,.85);
+      background:rgba(255,255,255,.14);
+      box-shadow:0 0 0 3px rgba(99,102,241,.28);
+    }
+    .eye-btn {
+      position:absolute; right:.82rem; top:50%; transform:translateY(-50%);
+      cursor:pointer; font-size:.95rem; opacity:.45;
+      transition:opacity .2s; user-select:none;
+    }
+    .eye-btn:hover { opacity:1; }
+
+
+
+    .role-badge {
+      display: none; font-size: .75rem; font-weight: 700;
+      padding: .2rem .65rem; border-radius: 20px; margin-left: .5rem;
+    }
+    .role-admin { background: rgba(245,158,11,.18); color: #f59e0b; border: 1px solid rgba(245,158,11,.4); }
+    .role-nurse { background: rgba(34,197,94,.15); color: #22c55e; border: 1px solid rgba(34,197,94,.35); }
+    .beds-nurse-note {
+      display: none; align-items: center; gap: .5rem;
+      background: rgba(99,102,241,.09); border: 1px solid rgba(99,102,241,.25);
+      border-radius: 8px; padding: .55rem 1rem; margin-bottom: .75rem;
+      color: rgba(255,255,255,.55); font-size: .82rem;
+    }
+    #login-btn {
+      width:100%; padding:.82rem;
+      background:linear-gradient(135deg,#6366f1,#3b82f6);
+      color:#fff; border:none; border-radius:12px;
+      font-size:.98rem; font-weight:700; cursor:pointer;
+      position:relative; overflow:hidden;
+      box-shadow:0 4px 22px rgba(99,102,241,.45);
+      transition:transform .15s, box-shadow .15s;
+    }
+    #login-btn:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(99,102,241,.55); }
+    #login-btn:active{ transform:scale(.98); }
+    .btn-spinner {
+      display:none; width:18px;height:18px;
+      border:2px solid rgba(255,255,255,.35);
+      border-top-color:#fff; border-radius:50%;
+      animation:spin .7s linear infinite; margin:0 auto;
+    }
+    #login-btn.loading .btn-label { display:none; }
+    #login-btn.loading .btn-spinner{ display:block; }
+    #login-error {
+      color:#fca5a5; font-size:.8rem; text-align:center;
+      margin-top:.7rem; min-height:1rem;
+    }
+
+    /* ══════════════════════════════════════════
+       MAIN APP
+    ══════════════════════════════════════════ */
+    #app { display:none; }
+    body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); }
+
+    /* ── Header ── */
+    header {
+      background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 50%,#2563eb 100%);
+      background-size:200% 200%;
+      color:#fff; padding:1rem 2rem;
+      display:flex; align-items:center; justify-content:space-between;
+      box-shadow:0 4px 20px rgba(0,0,0,.28);
+      position:sticky; top:0; z-index:50;
+      animation:slideDown .4s ease, gradientShift 12s ease .4s infinite;
+    }
+    header h1 { font-size:1.4rem;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:.5rem; }
+    .hcross { display:inline-block; animation:heartbeat 2.8s ease-in-out infinite; }
+    .header-right { display:flex;align-items:center;gap:.7rem;flex-wrap:wrap; }
+
+    #ws-status {
+      font-size:.76rem; padding:.28rem .75rem; border-radius:999px;
+      background:rgba(255,255,255,.12);
+      display:flex; align-items:center; gap:.35rem;
+      transition:background .3s;
+    }
+    .ws-dot { width:8px;height:8px;border-radius:50%;background:#6b7280;transition:background .3s; }
+    #ws-status.connected .ws-dot { background:#22c55e; animation:wsPulse 2s ease-in-out infinite; }
+    #ws-status.connected { background:rgba(34,197,94,.18); }
+
+    #user-label { font-size:.78rem;color:rgba(255,255,255,.6);display:flex;align-items:center;gap:.3rem; }
+    #logout-btn {
+      background:rgba(255,255,255,.12); color:#fff;
+      border:1px solid rgba(255,255,255,.22); border-radius:8px;
+      padding:.32rem .8rem; cursor:pointer; font-size:.8rem;font-weight:600;
+      transition:background .2s,transform .15s;
+    }
+    #logout-btn:hover { background:rgba(255,255,255,.22);transform:translateY(-1px); }
+
+    /* ── Layout ── */
+    main { max-width:1400px;margin:0 auto;padding:1.5rem; }
+
+    /* ── Stats ── */
+    .stats-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(138px,1fr));
+      gap:1rem; margin-bottom:1.75rem;
+    }
+    .stat-card {
+      background:var(--card); border:1px solid var(--border);
+      border-radius:16px; padding:1.2rem 1rem; text-align:center;
+      box-shadow:0 2px 8px rgba(0,0,0,.05);
+      transition:transform .2s,box-shadow .2s;
+      position:relative; overflow:hidden;
+      animation:fadeIn .5s ease both;
+    }
+    .stat-card:nth-child(1){animation-delay:.04s}
+    .stat-card:nth-child(2){animation-delay:.09s}
+    .stat-card:nth-child(3){animation-delay:.14s}
+    .stat-card:nth-child(4){animation-delay:.19s}
+    .stat-card:nth-child(5){animation-delay:.24s}
+    .stat-card:nth-child(6){animation-delay:.29s}
+    .stat-card::before {
+      content:''; position:absolute; top:0;left:0;right:0;height:3px;
+      border-radius:16px 16px 0 0;
+    }
+    .stat-card:hover { transform:translateY(-4px);box-shadow:0 10px 28px rgba(0,0,0,.1); }
+    .stat-card .sc-icon { font-size:1.55rem;margin-bottom:.25rem;display:block;animation:float 3.2s ease-in-out infinite; }
+    .stat-card .num { font-size:2.3rem;font-weight:800;line-height:1; }
+    .stat-card .lbl { font-size:.7rem;color:var(--sub);margin-top:.3rem;text-transform:uppercase;letter-spacing:.06em; }
+    .stat-card.available .num{color:var(--green)} .stat-card.available::before{background:var(--green)}
+    .stat-card.occupied  .num{color:var(--red)}   .stat-card.occupied::before {background:var(--red)}
+    .stat-card.maint     .num{color:var(--yellow)} .stat-card.maint::before    {background:var(--yellow)}
+    .stat-card.reserved  .num{color:var(--blue)}   .stat-card.reserved::before {background:var(--blue)}
+    .stat-card.total     .num{color:var(--text)}   .stat-card.total::before    {background:#94a3b8}
+    .stat-card.rate      .num{font-size:1.85rem;color:#8b5cf6} .stat-card.rate::before{background:#8b5cf6}
+
+    /* ── Tabs ── */
+    .tabs { display:flex;gap:.5rem;margin-bottom:1.2rem;flex-wrap:wrap; }
+    .tab-btn {
+      background:var(--card); border:1px solid var(--border);
+      border-radius:10px; padding:.48rem 1.2rem;
+      cursor:pointer; font-weight:600; font-size:.88rem;
+      transition:all .2s; position:relative; overflow:hidden;
+    }
+    .tab-btn:hover { transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.09); }
+    .tab-btn.active {
+      background:linear-gradient(135deg,#1e3a5f,#2563eb);
+      color:#fff; border-color:transparent;
+      box-shadow:0 4px 16px rgba(37,99,235,.32);
+    }
+    .tab-badge {
+      display:inline-flex;align-items:center;justify-content:center;
+      background:rgba(0,0,0,.1); width:19px;height:19px;
+      border-radius:999px; font-size:.7rem;font-weight:700;margin-left:.35rem;
+    }
+    .tab-btn.active .tab-badge { background:rgba(255,255,255,.25); }
+
+    /* ── Panels ── */
+    .panel { display:none; }
+    .panel.active { display:block; animation:fadeInUp .32s ease; }
+
+    /* ── Beds grid ── */
+    #beds-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
+      gap:.95rem;
+    }
+    .skeleton-card {
+      height:110px; border-radius:14px;
+      background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%);
+      background-size:600px 100%;
+      animation:shimmer 1.3s ease-in-out infinite;
+    }
+    .bed-card {
+      background:var(--card); border:2px solid var(--border);
+      border-radius:14px; padding:1rem; cursor:pointer;
+      transition:transform .2s,box-shadow .2s;
+      position:relative; overflow:hidden;
+      animation:fadeIn .4s ease both;
+    }
+    .bed-card:hover { transform:translateY(-4px) scale(1.02);box-shadow:0 10px 28px rgba(0,0,0,.12); }
+    .bed-card:active{ transform:scale(.98); }
+    .bed-card .bed-num  { font-weight:700;font-size:1.08rem; }
+    .bed-card .bed-ward { font-size:.74rem;color:var(--sub);margin-top:.15rem; }
+    .bed-card .bed-status {
+      margin-top:.6rem; display:inline-block;
+      font-size:.68rem;font-weight:700;text-transform:uppercase;
+      letter-spacing:.06em; padding:.2rem .58rem; border-radius:999px;
+      animation:badgePop .3s cubic-bezier(.22,1,.36,1) both;
+    }
+    .bed-card .bed-patient { font-size:.77rem;color:var(--sub);margin-top:.42rem; }
+    .bed-card .bed-updated { font-size:.67rem;color:#9ca3af;margin-top:.22rem; }
+
+    .status-AVAILABLE   { background:#dcfce7;color:#15803d;border-color:#86efac !important; }
+    .status-OCCUPIED    { background:#fee2e2;color:#b91c1c;border-color:#fca5a5 !important; }
+    .status-MAINTENANCE { background:#fef9c3;color:#92400e;border-color:#fde047 !important; }
+    .status-RESERVED    { background:#dbeafe;color:#1e40af;border-color:#93c5fd !important; }
+    .pill-AVAILABLE   { background:#dcfce7;color:#15803d; }
+    .pill-OCCUPIED    { background:#fee2e2;color:#b91c1c; }
+    .pill-MAINTENANCE { background:#fef9c3;color:#92400e; }
+    .pill-RESERVED    { background:#dbeafe;color:#1e40af; }
+
+    /* ── Tables ── */
+    .table-wrap { border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06); }
+    table { width:100%;border-collapse:collapse;background:var(--card); }
+    th {
+      background:linear-gradient(to bottom,#f8fafc,#f1f5f9);
+      padding:.78rem 1rem;text-align:left;
+      font-size:.77rem;text-transform:uppercase;letter-spacing:.05em;color:var(--sub);
+      border-bottom:1px solid var(--border);
+    }
+    td { padding:.7rem 1rem;border-bottom:1px solid var(--border);font-size:.87rem; }
+    tr:last-child td { border-bottom:none; }
+    tbody tr { transition:background .15s;animation:slideLeft .3s ease both; }
+    tbody tr:hover td { background:#f8fafc; }
+    .badge {
+      display:inline-block; font-size:.68rem;font-weight:700;
+      padding:.18rem .58rem; border-radius:999px; text-transform:uppercase;
+      animation:badgePop .3s cubic-bezier(.22,1,.36,1) both;
+    }
+    .badge-ADMITTED    { background:#dcfce7;color:#15803d; }
+    .badge-DISCHARGED  { background:#f1f5f9;color:#64748b; }
+    .badge-TRANSFERRED { background:#ede9fe;color:#7c3aed; }
+
+    /* ── Buttons ── */
+    .act-btn {
+      border:none; border-radius:7px; padding:.3rem .72rem;
+      cursor:pointer; font-size:.77rem;font-weight:600; margin:0 .12rem;
+      transition:transform .15s,box-shadow .15s;
+      position:relative; overflow:hidden;
+    }
+    .act-btn:hover { transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.12); }
+    .act-btn:active{ transform:scale(.96); }
+    .btn-green  { background:#dcfce7;color:#15803d; }
+    .btn-red    { background:#fee2e2;color:#b91c1c; }
+    .btn-yellow { background:#fef9c3;color:#92400e; }
+    .btn-blue   { background:#dbeafe;color:#1e40af; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.48); z-index:100;
+      align-items:center; justify-content:center;
+      backdrop-filter:blur(4px);
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--card); border-radius:20px;
+      padding:2rem; width:100%; max-width:460px;
+      box-shadow:0 24px 72px rgba(0,0,0,.28);
+      animation:modalIn .3s cubic-bezier(.22,1,.36,1);
+      margin:1rem;
+    }
+    .modal h3 { font-size:1.15rem;font-weight:700;margin-bottom:1.2rem;display:flex;align-items:center;gap:.5rem; }
+    .form-group { margin-bottom:.88rem; }
+    .form-group label { display:block;font-size:.82rem;font-weight:600;margin-bottom:.28rem;color:#374151; }
+    .form-group input, .form-group select {
+      width:100%; border:1.5px solid var(--border);
+      border-radius:9px; padding:.54rem .78rem; font-size:.9rem; outline:none;
+      transition:border-color .2s,box-shadow .2s;
+    }
+    .form-group input:focus,.form-group select:focus {
+      border-color:var(--blue); box-shadow:0 0 0 3px rgba(59,130,246,.14);
+    }
+    .modal-actions { display:flex;gap:.75rem;margin-top:1.2rem; }
+    .btn-primary {
+      flex:1; background:linear-gradient(135deg,#1e3a5f,#2563eb);
+      color:#fff; border:none; border-radius:10px;
+      padding:.62rem; font-weight:700; cursor:pointer;
+      box-shadow:0 4px 14px rgba(37,99,235,.3);
+      transition:transform .15s,box-shadow .15s;
+    }
+    .btn-primary:hover { transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,.4); }
+    .btn-secondary {
+      flex:1; background:var(--border); color:var(--text);
+      border:none; border-radius:10px; padding:.62rem;
+      font-weight:700; cursor:pointer; transition:background .2s;
+    }
+    .btn-secondary:hover { background:#d1d5db; }
+
+    /* ── Toolbar ── */
+    .toolbar { display:flex;gap:.7rem;margin-bottom:1.1rem;flex-wrap:wrap;align-items:center; }
+    .toolbar select,.toolbar input {
+      border:1.5px solid var(--border); border-radius:9px;
+      padding:.46rem .78rem; font-size:.87rem; outline:none;
+      transition:border-color .2s,box-shadow .2s;
+    }
+    .toolbar select:focus,.toolbar input:focus {
+      border-color:var(--blue); box-shadow:0 0 0 3px rgba(59,130,246,.12);
+    }
+    .toolbar .btn-primary { flex:none;padding:.46rem 1.15rem;border-radius:9px; }
+
+    /* ── Toast ── */
+    #toast {
+      position:fixed; bottom:1.5rem; right:1.5rem;
+      background:#1e293b; color:#fff;
+      padding:.78rem 1.3rem; border-radius:12px;
+      font-size:.87rem;font-weight:600;
+      opacity:0; pointer-events:none; z-index:999;
+      min-width:210px; display:flex; align-items:center; gap:.55rem;
+      box-shadow:0 8px 32px rgba(0,0,0,.22);
+    }
+    #toast.show { opacity:1; animation:toastIn .32s cubic-bezier(.22,1,.36,1) forwards; }
+    #toast.hide { animation:toastOut .28s ease forwards; }
+    #toast.error   { background:#dc2626; }
+    #toast.success { background:#16a34a; }
+
+    /* ── Ripple ── */
+    .ripple-fx {
+      position:absolute; border-radius:50%;
+      background:rgba(255,255,255,.38);
+      transform:scale(0); animation:ripple .52s linear;
+      pointer-events:none;
+    }
+
+    @media(max-width:600px){
+      header{padding:.75rem 1rem}
+      header h1{font-size:1.05rem}
+      main{padding:1rem}
+      .stats-grid{grid-template-columns:repeat(3,1fr)}
+      .stat-card .num{font-size:1.7rem}
+      #beds-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════ LOGIN PAGE ══════════ -->
+<div id="login-page">
+  <div class="lp-blob"></div>
+  <div class="lp-blob"></div>
+  <div class="lp-blob"></div>
+
+  <div id="login-card">
+    <div class="login-logo">
+      <span class="icon">🏥</span>
+      <h1>Smart Bed Tracker</h1>
+      <p>Hospital Management System</p>
+    </div>
+
+    <div class="login-field">
+      <label>Username</label>
+      <div class="login-field-wrap">
+        <span class="fi">👤</span>
+        <input id="login-user" type="text" placeholder="Enter username" autocomplete="username" />
+      </div>
+    </div>
+
+    <div class="login-field">
+      <label>Password</label>
+      <div class="login-field-wrap">
+        <span class="fi">🔒</span>
+        <input id="login-pass" type="password" placeholder="Enter password" autocomplete="current-password" />
+        <span class="eye-btn" id="eye-btn" onclick="toggleEye()">👁️</span>
+      </div>
+    </div>
+
+    <button id="login-btn" onclick="doLogin()">
+      <span class="btn-label">Sign In →</span>
+      <div class="btn-spinner"></div>
+    </button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- ══════════ MAIN APP ══════════ -->
+<div id="app">
+
+<header>
+  <h1><span class="hcross">🏥</span> Smart Hospital Bed Tracker</h1>
+  <div class="header-right">
+    <div id="user-label"><span>👤</span><span id="uname"></span><span id="role-badge" class="role-badge"></span></div>
+    <div id="ws-status">
+      <div class="ws-dot"></div>
+      <span id="ws-txt">connecting…</span>
+    </div>
+    <button id="logout-btn" onclick="doLogout()">⎋ Logout</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card total">    <span class="sc-icon">🛏️</span><div class="num" id="s-total">—</div><div class="lbl">Total Beds</div></div>
+    <div class="stat-card available"><span class="sc-icon">✅</span> <div class="num" id="s-avail">—</div><div class="lbl">Available</div></div>
+    <div class="stat-card occupied"> <span class="sc-icon">🔴</span> <div class="num" id="s-occ">—</div>  <div class="lbl">Occupied</div></div>
+    <div class="stat-card maint">    <span class="sc-icon">🔧</span> <div class="num" id="s-maint">—</div><div class="lbl">Maintenance</div></div>
+    <div class="stat-card reserved"> <span class="sc-icon">📋</span> <div class="num" id="s-res">—</div>  <div class="lbl">Reserved</div></div>
+    <div class="stat-card rate">     <span class="sc-icon">📊</span> <div class="num" id="s-rate">—</div> <div class="lbl">Occupancy %</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('beds',this)">🛏️ Beds<span class="tab-badge" id="badge-beds">0</span></button>
+    <button class="tab-btn" onclick="showTab('patients',this)">🧑‍⚕️ Patients<span class="tab-badge" id="badge-patients">0</span></button>
+    <button class="tab-btn" onclick="showTab('wards',this)">🏢 Wards<span class="tab-badge" id="badge-wards">0</span></button>
+  </div>
+
+  <!-- Beds Panel -->
+  <div id="tab-beds" class="panel active">
+    <div id="beds-admin-note" class="beds-nurse-note">
+      ℹ️ You are logged in as <strong>Nurse</strong>. Bed management (status changes) is restricted to Admin only.
+    </div>
+    <div class="toolbar">
+      <select id="filter-status" onchange="filterBeds()">
+        <option value="">All Statuses</option>
+        <option value="AVAILABLE">✅ Available</option>
+        <option value="OCCUPIED">🔴 Occupied</option>
+        <option value="MAINTENANCE">🔧 Maintenance</option>
+        <option value="RESERVED">📋 Reserved</option>
+      </select>
+      <input id="filter-search" placeholder="🔍 Search bed / ward…" oninput="filterBeds()" style="width:200px" />
+      <button class="btn-primary" onclick="loadBeds()">↻ Refresh</button>
+    </div>
+    <div id="beds-grid">
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+  </div>
+
+  <!-- Patients Panel -->
+  <div id="tab-patients" class="panel">
+    <div class="toolbar">
+      <select id="filter-patient-status" onchange="loadPatients()">
+        <option value="">All Patients</option>
+        <option value="admitted">Admitted Only</option>
+      </select>
+      <button id="admit-btn" class="btn-primary" onclick="openAdmitModal()">➕ Admit Patient</button>
+      <button class="btn-primary" style="background:linear-gradient(135deg,#7c3aed,#8b5cf6)" onclick="loadPatients()">↻ Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Name</th><th>Age</th><th>Diagnosis</th>
+            <th>Doctor</th><th>Bed</th><th>Status</th><th>Admitted</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="patients-body">
+          <tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--sub)">Loading patients…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Wards Panel -->
+  <div id="tab-wards" class="panel">
+    <div class="toolbar">
+      <button class="btn-primary" onclick="loadWards()">↻ Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Ward Name</th><th>Floor</th><th>Total Beds</th><th>Description</th></tr>
+        </thead>
+        <tbody id="wards-body">
+          <tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--sub)">Loading wards…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+</div><!-- /#app -->
+
+<!-- Admit Modal -->
+<div class="modal-overlay" id="admit-modal">
+  <div class="modal">
+    <h3>➕ Admit New Patient</h3>
+    <div class="form-group"><label>Patient Name *</label><input id="p-name" placeholder="Full name" /></div>
+    <div class="form-group"><label>Age *</label><input id="p-age" type="number" placeholder="e.g. 35" /></div>
+    <div class="form-group"><label>Diagnosis / Disease</label><input id="p-disease" placeholder="e.g. Pneumonia" /></div>
+    <div class="form-group"><label>Doctor Assigned</label><input id="p-doctor" placeholder="Dr. Sharma" /></div>
+    <div class="form-group"><label>Contact Number</label><input id="p-contact" placeholder="+91 9876543210" /></div>
+    <div class="form-group"><label>Select Bed *</label><select id="p-bed"></select></div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="submitAdmit()">✅ Admit</button>
+      <button class="btn-secondary" onclick="closeModal('admit-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast">
+  <span id="toast-icon"></span>
+  <span id="toast-msg"></span>
+</div>
+
+<script>
+  /* ─── State ─────────────────────────────────────────────────────── */
+  const API = '';
+  let credentials = '';
+  let currentUser = '';
+  let isAdmin = false;
+  let stompClient = null;
+  let allBeds = [];
+
+  /* ─── Login ─────────────────────────────────────────────────────── */
+  function toggleEye() {
+    const inp = document.getElementById('login-pass');
+    const btn = document.getElementById('eye-btn');
+    if (inp.type === 'password') { inp.type = 'text';     btn.textContent = '🙈'; }
+    else                         { inp.type = 'password'; btn.textContent = '👁️'; }
+  }
+
+  async function doLogin() {
+    const u   = document.getElementById('login-user').value.trim();
+    const p   = document.getElementById('login-pass').value.trim();
+    const err = document.getElementById('login-error');
+    const btn = document.getElementById('login-btn');
+    if (!u || !p) { err.textContent = '\u26a0\ufe0f Please enter both fields.'; return; }
+
+    btn.classList.add('loading');
+    err.textContent = '';
+
+    try {
+      const creds = btoa(u + ':' + p);
+      const res = await fetch(API + '/api/beds/stats', {
+        headers: { 'Authorization': 'Basic ' + creds }
+      });
+      if (res.status === 401 || res.status === 403) throw new Error('Invalid username or password.');
+      if (!res.ok) throw new Error('Server error. Please try again.');
+
+      // Fetch role from auth endpoint
+      const roleRes = await fetch(API + '/api/auth/me', {
+        headers: { 'Authorization': 'Basic ' + creds }
+      });
+      const roleData = roleRes.ok ? await roleRes.json() : { role: 'USER' };
+
+      credentials = creds;
+      currentUser = u;
+      isAdmin = (roleData.role === 'ADMIN');
+
+      document.getElementById('uname').textContent = u;
+      const roleBadge = document.getElementById('role-badge');
+      if (roleBadge) {
+        roleBadge.textContent = isAdmin ? '\ud83d\udd11 Admin' : '\ud83d\udc69\u200d\u2695\ufe0f Nurse';
+        roleBadge.className   = 'role-badge ' + (isAdmin ? 'role-admin' : 'role-nurse');
+        roleBadge.style.display = 'inline-block';
+      }
+      applyRoleUI();
+
+      const lp = document.getElementById('login-page');
+      lp.style.transition = 'opacity .4s ease, transform .4s ease';
+      lp.style.opacity    = '0';
+      lp.style.transform  = 'scale(1.05)';
+      setTimeout(() => {
+        lp.style.display = 'none';
+        const app = document.getElementById('app');
+        app.style.display    = 'block';
+        app.style.opacity    = '0';
+        app.style.transition = 'opacity .35s ease';
+        requestAnimationFrame(() => { app.style.opacity = '1'; });
+        loadAll();
+        connectWS();
+      }, 380);
+
+    } catch (e) {
+      err.textContent = '\u274c ' + e.message;
+    } finally {
+      btn.classList.remove('loading');
+    }
+  }
+
+  function applyRoleUI() {
+    const admitBtn = document.getElementById('admit-btn');
+    if (admitBtn) admitBtn.style.display = isAdmin ? '' : 'none';
+    const bedsNote = document.getElementById('beds-admin-note');
+    if (bedsNote) bedsNote.style.display = isAdmin ? 'none' : 'flex';
+  }
+
+  function doLogout() {
+    credentials = ''; currentUser = ''; isAdmin = false;
+    if (stompClient && stompClient.connected) stompClient.disconnect();
+    const app = document.getElementById('app');
+    app.style.transition = 'opacity .28s';
+    app.style.opacity    = '0';
+    setTimeout(() => {
+      app.style.display    = 'none';
+      app.style.opacity    = '';
+      app.style.transition = '';
+      document.getElementById('login-user').value = '';
+      document.getElementById('login-pass').value = '';
+      document.getElementById('login-error').textContent = '';
+      const lp = document.getElementById('login-page');
+      lp.style.display    = 'flex';
+      lp.style.opacity    = '0';
+      lp.style.transform  = 'scale(.97)';
+      lp.style.transition = 'opacity .38s, transform .38s';
+      requestAnimationFrame(() => { lp.style.opacity = '1'; lp.style.transform = 'scale(1)'; });
+    }, 280);
+  }
+
+  ['login-user','login-pass'].forEach(id =>
+    document.getElementById(id).addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); })
+  );
+
+  /* ─── Auth headers ──────────────────────────────────────────────── */
+  function authH() {
+    return { 'Authorization': 'Basic ' + credentials, 'Content-Type': 'application/json' };
+  }
+
+  /* ─── API helper ────────────────────────────────────────────────── */
+  async function apiFetch(url, opts = {}) {
+    opts.headers = { ...authH(), ...(opts.headers || {}) };
+    const res = await fetch(API + url, opts);
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(e.message || 'Request failed');
+    }
+    if (res.status === 204) return null;
+    return res.json();
+  }
+
+  /* ─── Load all ──────────────────────────────────────────────────── */
+  function loadAll() { loadStats(); loadBeds(); loadPatients(); loadWards(); }
+
+  async function loadStats() {
+    try {
+      const s = await apiFetch('/api/beds/stats');
+      animNum('s-total', s.total);
+      animNum('s-avail', s.available);
+      animNum('s-occ',   s.occupied);
+      animNum('s-maint', s.maintenance);
+      animNum('s-res',   s.reserved);
+      document.getElementById('s-rate').textContent = s.occupancyRate + '%';
+    } catch(e) { /* stats silently fail */ }
+  }
+
+  function animNum(id, target) {
+    const el   = document.getElementById(id);
+    const from = parseInt(el.textContent) || 0;
+    const dur  = 600;
+    const t0   = performance.now();
+    (function step(now) {
+      const p = Math.min((now - t0) / dur, 1);
+      const e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (target - from) * e);
+      if (p < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+
+  async function loadBeds() {
+    try {
+      allBeds = await apiFetch('/api/beds');
+      document.getElementById('badge-beds').textContent = allBeds.length;
+      filterBeds();
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  function filterBeds() {
+    const st  = document.getElementById('filter-status').value;
+    const q   = document.getElementById('filter-search').value.toLowerCase();
+    const out = allBeds.filter(b => {
+      const ms = !st || b.status === st;
+      const mq = !q  || b.bedNumber.toLowerCase().includes(q) ||
+                        (b.ward && b.ward.name.toLowerCase().includes(q));
+      return ms && mq;
+    });
+    renderBeds(out);
+  }
+
+  function renderBeds(beds) {
+    const g = document.getElementById('beds-grid');
+    if (!beds.length) {
+      g.innerHTML = '<p style="color:var(--sub);padding:2rem;text-align:center;grid-column:1/-1">🔍 No beds match the current filters.</p>';
+      return;
+    }
+    g.innerHTML = beds.map((b, i) => `
+      <div class="bed-card status-${b.status}" style="animation-delay:${i*.03}s"
+           onclick="bedAction(${b.id},'${b.status}','${escHtml(b.bedNumber)}')">
+        <div class="bed-num">🛏️ ${escHtml(b.bedNumber)}</div>
+        <div class="bed-ward">${b.ward ? escHtml(b.ward.name) : 'Unassigned'}</div>
+        <span class="bed-status pill-${b.status}">${b.status}</span>
+        ${b.currentPatient ? `<div class="bed-patient">👤 ${escHtml(b.currentPatient.name)}</div>` : ''}
+        ${b.lastUpdated    ? `<div class="bed-updated">${fmtDate(b.lastUpdated)}</div>` : ''}
+      </div>`).join('');
+  }
+
+  async function bedAction(id, status, num) {
+    if (!isAdmin) { toast('\u26d4 Only admins can change bed status.', 'error'); return; }
+    const map = {
+      AVAILABLE:   ['assign','maintenance','reserve'],
+      OCCUPIED:    ['release','maintenance'],
+      MAINTENANCE: ['release'],
+      RESERVED:    ['assign','release']
+    };
+    const action = await askAction(num, map[status] || []);
+    if (!action) return;
+    try {
+      await apiFetch(`/api/beds/${id}/${action}`, { method:'PUT' });
+      toast(`Bed ${num} → ${action}`, 'success');
+      loadAll();
+    } catch(e) { toast(e.message,'error'); }
+  }
+
+  function askAction(num, actions) {
+    return new Promise(resolve => {
+      const labels = { assign:'🟢 Mark Occupied', release:'✅ Mark Available',
+                       maintenance:'🔧 Set Maintenance', reserve:'📋 Reserve' };
+      const btns = actions.map(a =>
+        `<button class="act-btn btn-blue" style="margin:.25rem;padding:.5rem 1.1rem;font-size:.85rem"
+                 onclick="window.__bedRes('${a}')">${labels[a]}</button>`
+      ).join('');
+      const d = document.createElement('div');
+      d.className = 'modal-overlay open';
+      d.innerHTML = `<div class="modal" style="max-width:360px;text-align:center">
+        <h3 style="justify-content:center">🛏️ Bed ${escHtml(num)}</h3>
+        <p style="margin-bottom:1rem;color:var(--sub);font-size:.88rem">Choose an action:</p>
+        <div style="display:flex;flex-wrap:wrap;justify-content:center">${btns}</div>
+        <button class="act-btn btn-red" style="margin-top:1rem;padding:.4rem 1.2rem"
+                onclick="window.__bedRes(null)">✕ Cancel</button>
+      </div>`;
+      document.body.appendChild(d);
+      window.__bedRes = v => { document.body.removeChild(d); resolve(v); };
+    });
+  }
+
+  async function loadPatients() {
+    try {
+      const f = document.getElementById('filter-patient-status').value;
+      const url = f === 'admitted' ? '/api/patients/admitted' : '/api/patients';
+      const pts = await apiFetch(url);
+      document.getElementById('badge-patients').textContent = pts.length;
+      renderPatients(pts);
+    } catch(e) { toast(e.message,'error'); }
+  }
+
+  function renderPatients(pts) {
+    const tb = document.getElementById('patients-body');
+    if (!pts.length) {
+      tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--sub)">No patients found.</td></tr>';
+      return;
+    }
+    tb.innerHTML = pts.map((p, i) => `
+      <tr style="animation-delay:${i*.04}s">
+        <td style="color:var(--sub);font-size:.8rem">#${p.id}</td>
+        <td><strong>${escHtml(p.name)}</strong></td>
+        <td>${p.age}</td>
+        <td>${p.disease ? escHtml(p.disease) : '—'}</td>
+        <td>${p.doctorAssigned ? escHtml(p.doctorAssigned) : '—'}</td>
+        <td>${p.bed ? `<strong>${escHtml(p.bed.bedNumber)}</strong>` : '—'}</td>
+        <td><span class="badge badge-${p.status}">${p.status}</span></td>
+        <td style="font-size:.82rem">${p.admissionDate ? fmtDate(p.admissionDate) : '—'}</td>
+        <td>${p.status==='ADMITTED'
+               ? `<button class="act-btn btn-red" onclick="discharge(${p.id})">Discharge</button>`
+               : '—'}</td>
+      </tr>`).join('');
+  }
+
+  async function discharge(id) {
+    if (!confirm('Discharge this patient?')) return;
+    try {
+      await apiFetch(`/api/patients/${id}/discharge`, { method:'PUT' });
+      toast('Patient discharged successfully.', 'success');
+      loadAll();
+    } catch(e) { toast(e.message,'error'); }
+  }
+
+  async function loadWards() {
+    try {
+      const ws = await apiFetch('/api/wards');
+      document.getElementById('badge-wards').textContent = ws.length;
+      document.getElementById('wards-body').innerHTML = ws.map((w, i) => `
+        <tr style="animation-delay:${i*.05}s">
+          <td style="color:var(--sub);font-size:.8rem">#${w.id}</td>
+          <td><strong>🏢 ${escHtml(w.name)}</strong></td>
+          <td>Floor ${w.floor}</td>
+          <td><span style="font-weight:700;color:var(--blue)">${w.totalBeds}</span></td>
+          <td style="color:var(--sub)">${w.description ? escHtml(w.description) : '—'}</td>
+        </tr>`).join('');
+    } catch(e) { toast(e.message,'error'); }
+  }
+
+  /* ─── Admit modal ───────────────────────────────────────────────── */
+  async function openAdmitModal() {
+    try {
+      const avail = await apiFetch('/api/beds/available');
+      const sel   = document.getElementById('p-bed');
+      sel.innerHTML = avail.length
+        ? avail.map(b => `<option value="${b.id}">${escHtml(b.bedNumber)} – ${b.ward ? escHtml(b.ward.name) : 'N/A'}</option>`).join('')
+        : '<option disabled>No available beds</option>';
+      document.getElementById('admit-modal').classList.add('open');
+    } catch(e) { toast(e.message,'error'); }
+  }
+
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+  async function submitAdmit() {
+    const name    = document.getElementById('p-name').value.trim();
+    const age     = parseInt(document.getElementById('p-age').value);
+    const disease = document.getElementById('p-disease').value.trim();
+    const doctor  = document.getElementById('p-doctor').value.trim();
+    const contact = document.getElementById('p-contact').value.trim();
+    const bedId   = document.getElementById('p-bed').value;
+    if (!name || !age || !bedId) { toast('Name, age and bed are required.','error'); return; }
+    try {
+      await apiFetch(`/api/patients/admit/${bedId}`, {
+        method:'POST',
+        body: JSON.stringify({ name, age, disease, doctorAssigned:doctor, contactNumber:contact })
+      });
+      closeModal('admit-modal');
+      toast(`${name} admitted successfully! 🎉`, 'success');
+      ['p-name','p-age','p-disease','p-doctor','p-contact'].forEach(id =>
+        document.getElementById(id).value = '');
+      loadAll();
+    } catch(e) { toast(e.message,'error'); }
+  }
+
+  /* ─── WebSocket ─────────────────────────────────────────────────── */
+  function connectWS() {
+    if (stompClient && stompClient.connected) stompClient.disconnect();
+    const sock = new SockJS('/ws');
+    stompClient = Stomp.over(sock);
+    stompClient.debug = null;
+    stompClient.connect({}, () => {
+      const el = document.getElementById('ws-status');
+      document.getElementById('ws-txt').textContent = 'WebSocket: live';
+      el.classList.add('connected');
+
+      stompClient.subscribe('/topic/beds', msg => {
+        const bed = JSON.parse(msg.body);
+        const idx = allBeds.findIndex(b => b.id === bed.id);
+        if (idx >= 0) allBeds[idx] = bed; else allBeds.push(bed);
+        filterBeds(); loadStats();
+      });
+      stompClient.subscribe('/topic/patients', () => loadPatients());
+
+    }, () => {
+      const el = document.getElementById('ws-status');
+      document.getElementById('ws-txt').textContent = 'WebSocket: disconnected';
+      el.classList.remove('connected');
+      setTimeout(connectWS, 5000);
+    });
+  }
+
+  /* ─── Tabs ──────────────────────────────────────────────────────── */
+  function showTab(name, btn) {
+    document.querySelectorAll('.panel').forEach(p   => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  /* ─── Toast ─────────────────────────────────────────────────────── */
+  let toastTmr;
+  function toast(msg, type = '') {
+    const el   = document.getElementById('toast');
+    const icon = { success:'✅', error:'❌', '':'ℹ️' };
+    document.getElementById('toast-icon').textContent = icon[type] || 'ℹ️';
+    document.getElementById('toast-msg').textContent  = msg;
+    el.className = 'show' + (type ? ' ' + type : '');
+    clearTimeout(toastTmr);
+    toastTmr = setTimeout(() => {
+      el.classList.replace('show','hide');
+      setTimeout(() => { el.className = ''; }, 300);
+    }, 3500);
+  }
+
+  /* ─── Helpers ───────────────────────────────────────────────────── */
+  function fmtDate(dt) {
+    const d = new Date(dt);
+    return d.toLocaleDateString('en-IN') + ' ' +
+           d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  }
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ─── Ripple on buttons ─────────────────────────────────────────── */
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.id === 'eye-btn') return;
+    const r    = document.createElement('span');
+    r.className = 'ripple-fx';
+    const rect  = btn.getBoundingClientRect();
+    const size  = Math.max(rect.width, rect.height);
+    r.style.cssText = `width:${size}px;height:${size}px;` +
+                      `left:${e.clientX-rect.left-size/2}px;` +
+                      `top:${e.clientY-rect.top-size/2}px`;
+    btn.appendChild(r);
+    setTimeout(() => r.remove(), 560);
+  });
+</script>
+</body>
+</html>

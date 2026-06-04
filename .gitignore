@@ -1,0 +1,80 @@
+####################################
+# Maven
+####################################
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+####################################
+# Maven Wrapper
+####################################
+.mvn/wrapper/maven-wrapper.jar
+
+####################################
+# IntelliJ IDEA
+####################################
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+####################################
+# Eclipse
+####################################
+.project
+.classpath
+.settings/
+.factorypath
+
+####################################
+# VS Code
+####################################
+.vscode/
+
+####################################
+# Java
+####################################
+*.class
+*.jar
+*.war
+*.ear
+
+####################################
+# Logs
+####################################
+*.log
+logs/
+
+####################################
+# OS Files
+####################################
+.DS_Store
+Thumbs.db
+
+####################################
+# Environment Variables
+####################################
+.env
+.env.*
+
+####################################
+# Application Secrets
+####################################
+application-local.properties
+application-local.yml
+application-prod.properties
+application-prod.yml
+application-secret.properties
+application-secret.yml
+
+####################################
+# Temporary Files
+####################################
+*.tmp
+*.swp
